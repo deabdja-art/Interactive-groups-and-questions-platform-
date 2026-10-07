@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>منصة الأنشطة والتوزيع العشوائي للمجموعات</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts (Tajawal) -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+    
+    <!-- React & Babel CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            // View state: 'teacher' or 'student'
+            const [view, setView] = useState('teacher');
+
+            // Form inputs
+            const [activityName, setActivityName] = useState('');
+            const [studentsText, setStudentsText] = useState('');
+            const [groupCount, setGroupCount] = useState(4);
+            const [questionsText, setQuestionsText] = useState('');
+            const [showTimer, setShowTimer] = useState(true);
+
+            // Generated Data State
+            const [isGenerated, setIsGenerated] = useState(false);
+            const [groups, setGroups] = useState([]);
+            const [activityData, setActivityData] = useState(null);
+
+            // Active tab for student/teacher view after generation
+            const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
+
+            // Timer state
+            const [timeLeft, setTimeLeft] = useState(300); // 5 mins default
+            const [timerRunning, setTimerRunning] = useState(false);
+
+            useEffect(() => {
+                let timer = null;
+                if (timerRunning && timeLeft > 0) {
+                    timer = setInterval(() => {
+                        setTimeLeft(prev => prev - 1);
+                    }, 1000);
+                } else if (timeLeft === 0) {
+                    setTimerRunning(false);
+                }
+                return () => clearInterval(timer);
+            }, [timerRunning, timeLeft]);
+
+            // Helper to shuffle arrays
+            const shuffleArray = (array) => {
+                const arr = [...array];
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+                return arr;
+            };
+
+            // Generate Groups & Distribute Questions
+            const handleGenerate = (e) => {
+                e.preventDefault();
+
+                const studentList = studentsText
+                    .split('\n')
+                    .map(s => s.trim())
+                    .filter(s => s.length > 0);
+
+                const questionList = questionsText
+                    .split('\n')
+                    .map(q => q.trim())
+                    .filter(q => q.length > 0);
+
+                if (studentList.length === 0) {
+                    alert('الرجاء إدخال أسماء الطلاب أولاً!');
+                    return;
+                }
+
+                // Shuffle students
+                const shuffledStudents = shuffleArray(studentList);
+                const count = Math.max(1, parseInt(groupCount) || 1);
+
+                // Create empty groups
+                const createdGroups = Array.from({ length: count }, (_, i) => ({
+                    id: i + 1,
+                    name: `المجموعة ${i + 1}`,
+                    students: [],
+                    questions: [],
+                    points: 0
+                }));
+
+                // Distribute students evenly
+                shuffledStudents.forEach((student, index) => {
+                    const groupIdx = index % count;
+                    createdGroups[groupIdx].students.push(student);
+                });
+
+                // Distribute questions evenly
+                if (questionList.length > 0) {
+                    const shuffledQuestions = shuffleArray(questionList);
+                    shuffledQuestions.forEach((q, index) => {
+                        const groupIdx = index % count;
+                        createdGroups[groupIdx].questions.push(q);
+                    });
+                }
+
+                setGroups(createdGroups);
+                setActivityData({
+                    title: activityName || 'نشاط تفاعلي',
+                    createdAt: new Date().toLocaleTimeString('ar-SA')
+                });
+                setIsGenerated(true);
+                setSelectedGroupIndex(0);
+            };
+
+            // Function to reset and start a NEW activity / class
+            const handleResetForNewClass = () => {
+                if (confirm('هل أنت تأكد من إعداد نشاط جديد وفصل جديد؟ سيتم إعادة ضبط الإدخالات.')) {
+                    setIsGenerated(false);
+                    setActivityName('');
+                    setStudentsText('');
+                    setQuestionsText('');
+                    setGroupCount(4);
+                    setGroups([]);
+                    setActivityData(null);
+                    setTimerRunning(false);
+                    setTimeLeft(300);
+                }
+            };
+
+            // Re-shuffle current students into new groups
+            const handleReshuffleCurrent = () => {
+                if (groups.length === 0) return;
+
+                // Extract all current students
+                const allStudents = groups.flatMap(g => g.students);
+                const allQuestions = groups.flatMap(g => g.questions);
+
+                const shuffledS = shuffleArray(allStudents);
+                const shuffledQ = shuffleArray(allQuestions);
+
+                const newGroups = groups.map(g => ({
+                    ...g,
+                    students: [],
+                    questions: []
+                }));
+
+                shuffledS.forEach((student, index) => {
+                    const groupIdx = index % newGroups.length;
+                    newGroups[groupIdx].students.push(student);
+                });
+
+                if (shuffledQ.length > 0) {
+                    shuffledQ.forEach((q, index) => {
+                        const groupIdx = index % newGroups.length;
+                        newGroups[groupIdx].questions.push(q);
+                    });
+                }
+
+                setGroups(newGroups);
+            };
+
+            // Add point to a group
+            const handleAddPoint = (groupIndex) => {
+                const updated = [...groups];
+                updated[groupIndex].points += 1;
+                setGroups(updated);
+            };
+
+            // Format seconds into MM:SS
+            const formatTime = (secs) => {
+                const m = Math.floor(secs / 60);
+                const s = secs % 60;
+                return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            };
+
+            return (
+                <div class="max-w-5xl mx-auto px-4 py-6">
+                    {/* Header */}
+                    <header class="flex flex-col md:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-6 gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-md shadow-indigo-100">
+                                🎯
+                            </div>
+                            <div>
+                                <h1 class="text-xl font-bold text-slate-800">منصة الأنشطة والتوزيع العشوائي</h1>
+                                <p class="text-xs text-slate-500">إدارة المجموعات والأسئلة التفاعلية للفصول</p>
+                            </div>
+                        </div>
+
+                        {/* View Switcher Toggle */}
+                        <div class="flex items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-sm font-medium">
+                            <button
+                                onClick={() => setView('teacher')}
+                                class={`px-4 py-2 rounded-lg transition-all ${view === 'teacher' ? 'bg-white text-indigo-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                            >
+                                👨‍🏫 واجهة المعلم
+                            </button>
+                            <button
+                                onClick={() => setView('student')}
+                                class={`px-4 py-2 rounded-lg transition-all ${view === 'student' ? 'bg-white text-indigo-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                            >
+                                🎓 واجهة الطلاب
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* TEACHER VIEW */}
+                    {view === 'teacher' && (
+                        <div>
+                            {!isGenerated ? (
+                                /* INPUT FORM FOR CREATING AN ACTIVITY */
+                                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
+                                    <div class="border-b border-slate-100 pb-4">
+                                        <h2 class="text-lg font-bold text-slate-800">إنشاء نشاط جديد وتوزيع المجموعات</h2>
+                                        <p class="text-xs text-slate-500 mt-1">أدخل أسماء الطلاب والأسئلة للبدء بالتوزيع العشوائي الآلي</p>
+                                    </div>
+
+                                    <form onSubmit={handleGenerate} class="space-y-5">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 mb-1">اسم النشاط / المادة</label>
+                                            <input
+                                                type="text"
+                                                placeholder="مثال: نشاط العلوم - الفصل الأول"
+                                                value={activityName}
+                                                onChange={(e) => setActivityName(e.target.value)}
+                                                class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                            />
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div>
+                                                <label class="block text-sm font-semibold text-slate-700 mb-1">
+                                                    أسماء الطلاب <span class="text-xs font-normal text-slate-400">(اسم كل طالب في سطر مستقل)</span>
+                                                </label>
+                                                <textarea
+                                                    rows="8"
+                                                    placeholder="أحمد علي&#10;محمد خالد&#10;عمر يوسف&#10;سارة أحمد&#10;فاطمة محمود"
+                                                    value={studentsText}
+                                                    onChange={(e) => setStudentsText(e.target.value)}
+                                                    class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm leading-relaxed"
+                                                    required
+                                                ></textarea>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-semibold text-slate-700 mb-1">
+                                                    الأسئلة أو المهام <span class="text-xs font-normal text-slate-400">(سؤال/مهمة في كل سطر - اختياري)</span>
+                                                </label>
+                                                <textarea
+                                                    rows="8"
+                                                    placeholder="سؤال 1: ما هو المفهوم الأساسي للدرس؟&#10;سؤال 2: اذكر ثلاثة أمثلة على العملية.&#10;سؤال 3: اشرح النتائج المتوقعة."
+                                                    value={questionsText}
+                                                    onChange={(e) => setQuestionsText(e.target.value)}
+                                                    class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm leading-relaxed"
+                                                ></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-center bg-slate-50 p-4 rounded-xl">
+                                            <div>
+                                                <label class="block text-sm font-semibold text-slate-700 mb-1">عدد المجموعات المطلوب</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="20"
+                                                    value={groupCount}
+                                                    onChange={(e) => setGroupCount(e.target.value)}
+                                                    class="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                                                />
+                                            </div>
+
+                                            <div class="flex items-center gap-2 pt-4 md:pt-0">
+                                                <input
+                                                    type="checkbox"
+                                                    id="timerCheck"
+                                                    checked={showTimer}
+                                                    onChange={(e) => setShowTimer(e.target.checked)}
+                                                    class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                                                />
+                                                <label htmlFor="timerCheck" class="text-sm font-medium text-slate-700 select-none cursor-pointer">
+                                                    تفعيل مؤقت النشاط التنافسي
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 text-base"
+                                        >
+                                            <span>🔀</span>
+                                            <span>توزيع المجموعات والأسئلة عشوائياً</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            ) : (
+                                /* GENERATED RESULT & CONTROL PANEL FOR TEACHER */
+                                <div class="space-y-6">
+                                    {/* Action Bar */}
+                                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <h2 class="text-lg font-bold text-slate-800">{activityData?.title}</h2>
+                                            <p class="text-xs text-slate-500">تم التوزيع عشوائياً بنجاح • {groups.length} مجموعات</p>
+                                        </div>
+
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <button
+                                                onClick={handleReshuffleCurrent}
+                                                class="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all"
+                                            >
+                                                🔄 إعادة الخلط لنفس الطلاب
+                                            </button>
+
+                                            {/* KEY FIX: Button to create ANOTHER activity for another class */}
+                                            <button
+                                                onClick={handleResetForNewClass}
+                                                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-indigo-100 transition-all"
+                                            >
+                                                ➕ إنشاء نشاط آخر (فصل جديد)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Optional Timer Section */}
+                                    {showTimer && (
+                                        <div class="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between flex-wrap gap-4">
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-2xl">⏱️</span>
+                                                <div>
+                                                    <span class="text-xs text-slate-400 block">مؤقت النشاط</span>
+                                                    <span class="text-2xl font-black tracking-widest text-indigo-400">{formatTime(timeLeft)}</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => setTimerRunning(!timerRunning)}
+                                                    class={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${timerRunning ? 'bg-amber-500 text-slate-950' : 'bg-emerald-500 text-white'}`}
+                                                >
+                                                    {timerRunning ? 'إيقاف مؤقت' : 'بدء المؤقت'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setTimeLeft(300); setTimerRunning(false); }}
+                                                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                                                >
+                                                    إعادة ضبط
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Groups Grid */}
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                                        {groups.map((group, idx) => (
+                                            <div key={group.id} class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-between">
+                                                <div>
+                                                    <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                                                        <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                                                            <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
+                                                            {group.name}
+                                                        </h3>
+                                                        <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full">
+                                                            {group.students.length} طلاب
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Student List */}
+                                                    <div class="mb-4">
+                                                        <span class="text-xs font-bold text-slate-400 block mb-2">أعضاء المجموعة:</span>
+                                                        <div class="flex flex-wrap gap-1.5">
+                                                            {group.students.map((st, i) => (
+                                                                <span key={i} class="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
+                                                                    {st}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Assigned Questions */}
+                                                    {group.questions.length > 0 && (
+                                                        <div class="mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+                                                            <span class="text-xs font-bold text-amber-800 block mb-1">الأسئلة المخصصة:</span>
+                                                            <ul class="text-xs text-amber-900 space-y-1 list-disc list-inside">
+                                                                {group.questions.map((q, qIdx) => (
+                                                                    <li key={qIdx}>{q}</li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Score / Points */}
+                                                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                                                    <span class="text-xs text-slate-500 font-medium">النقاط: <strong class="text-slate-800 text-sm">{group.points}</strong></span>
+                                                    <button
+                                                        onClick={() => handleAddPoint(idx)}
+                                                        class="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-all border border-emerald-200"
+                                                    >
+                                                        + إضافة نقطة ⭐
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* STUDENT VIEW */}
+                    {view === 'student' && (
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[400px]">
+                            {!isGenerated ? (
+                                <div class="text-center py-16 space-y-3">
+                                    <div class="text-5xl">⌛</div>
+                                    <h3 class="text-lg font-bold text-slate-700">في انتظار المعلم لإعداد النشاط</h3>
+                                    <p class="text-xs text-slate-400">سيتم عرض المجموعات والأسئلة فور قيام المعلم بالتوزيع العشوائي.</p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div class="text-center mb-6">
+                                        <h2 class="text-xl font-bold text-slate-800">{activityData?.title}</h2>
+                                        <p class="text-xs text-slate-500">اختر مجموعتك لعرض الأعضاء والأسئلة الخاصة بكم</p>
+                                    </div>
+
+                                    {/* Group Tabs */}
+                                    <div class="flex items-center justify-center flex-wrap gap-2 mb-6">
+                                        {groups.map((g, idx) => (
+                                            <button
+                                                key={g.id}
+                                                onClick={() => setSelectedGroupIndex(idx)}
+                                                class={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${selectedGroupIndex === idx ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                            >
+                                                {g.name}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Selected Group Content */}
+                                    {groups[selectedGroupIndex] && (
+                                        <div class="max-w-xl mx-auto bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                                            <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                                                <h3 class="text-lg font-bold text-indigo-700">
+                                                    {groups[selectedGroupIndex].name}
+                                                </h3>
+                                                <span class="text-sm font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+                                                    النقاط: {groups[selectedGroupIndex].points} ⭐
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">أعضاء الفريق:</h4>
+                                                <div class="grid grid-cols-2 gap-2">
+                                                    {groups[selectedGroupIndex].students.map((st, i) => (
+                                                        <div key={i} class="bg-white p-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                                            {st}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {groups[selectedGroupIndex].questions.length > 0 && (
+                                                <div class="bg-white p-4 rounded-xl border border-slate-200">
+                                                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">الأسئلة المطلوبة من مجموعتكم:</h4>
+                                                    <ol class="space-y-2 list-decimal list-inside text-sm text-slate-800 font-medium">
+                                                        {groups[selectedGroupIndex].questions.map((q, i) => (
+                                                            <li key={i} class="bg-amber-50/60 p-2.5 rounded-lg border border-amber-100">{q}</li>
+                                                        ))}
+                                                    </ol>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
